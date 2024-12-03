@@ -1,19 +1,17 @@
-// theprojectname platform services
-metadata name = 'ThePlatformNames managed environment deployment'
-metadata description = 'Deploys the managed environment for the theprojectname platform services'
-metadata author = 'theprojectname Platform Team'
+metadata name = 'ThePlatform managed environment deployment'
+metadata description = 'Deploys the managed environment for the ThePlatform'
+metadata author = 'Peter Nylander'
 
 @description('Name of the environment to deploy to. Example: dev, test, prod')
 @allowed([
   'dev'
-  'ftr'
   'test'
   'prod'
 ])
 param environment string = 'dev'
 
 @description('Name of the system. Example: ThePlatformName')
-param systemName string = 'sg-ThePlatformName'
+param systemName string = 'ThePlatformName'
 
 @description('Location of the resources. Example: westeurope')
 param location string = resourceGroup().location
@@ -25,7 +23,7 @@ param logAnalyticsWorkspaceName string = 'DefaultWorkspace-${subscription().subs
 param logAnalyticsWorkspaceResourceGroup string = 'DefaultResourceGroup-SEC'
 
 @description('Name of the managed container apps environment')
-param managedEnvironmentName string = 'cae-${systemName}-${environment}-swe'
+param managedEnvironmentName string = toLower('cae-${systemName}-${environment}-swe')
 
 @description('The current date and time in UTC format. Example: 2021-06-01T1200')
 param now string = utcNow('yyyy-MM-ddTHHmm')
@@ -54,8 +52,8 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09
   scope: resourceGroup(logAnalyticsWorkspaceResourceGroup)
 }
 
-module managedEnvironment 'br/public:avm/res/app/managed-environment:0.8.0' = {
-  name: 'managedEnvironmentDeployment-${now}'
+module managedEnvironment 'br/public:avm/res/app/managed-environment:0.8.1' = {
+  name: '${deployment().name}-cae'
   params: {
     // Required parameters
     logAnalyticsWorkspaceResourceId: logAnalyticsWorkspace.id
@@ -68,8 +66,8 @@ module managedEnvironment 'br/public:avm/res/app/managed-environment:0.8.0' = {
   }
 }
 
-module keyvault 'br/public:avm/res/key-vault/vault:0.9.0' = {
-  name: 'keyVaultDeployment-${now}'
+module keyvault 'br/public:avm/res/key-vault/vault:0.11.0' = {
+  name: '${deployment().name}-kv'
   params: {
     name: keyVaultName
     tags: resourceTags

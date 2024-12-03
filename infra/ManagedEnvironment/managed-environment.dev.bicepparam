@@ -4,7 +4,7 @@ param environment = 'dev'
 
 param managedEnvironmentName = 'cae-theplatform-dev-swe'
 
-param keyVaultName = 'kv-sg-pltfsvc-dev-swe'
+param keyVaultName = 'kv-cae-theplatform-dev-swe'
 
 param secrets = [
   {
