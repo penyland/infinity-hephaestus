@@ -1,0 +1,149 @@
+parameters:
+  # acrServiceConnection - Required - the service connection to the Azure Container Registry
+  - name: acrServiceConnection
+    type: string
+
+  # containerRegistryName - Required - the name of the container registry
+  - name: containerRegistryName
+    type: string
+
+  # projectNames - Required - the name(s) of the project(s) to build
+  - name: projectNames
+    type: object
+
+  # tags - Optional - the tags to apply to the container image
+  - name: tags
+    type: string
+    default: '"\""$(Build.BuildNumber)"\""'
+
+  # versionPrefix - Optional - Version string for the container image
+  - name: versionPrefix
+    type: string
+    default: $(Build.BuildNumber)
+
+  # buildConfiguration - Optional - the configuration to build
+  - name: buildConfiguration
+    type: string
+    default: "Release"
+
+  # runtime - Optional - the runtime
+  - name: runtime
+    type: string
+    default: linux-x64
+
+  # artifactName - Optional - the name of the artifact
+  - name: artifactName
+    type: string
+    default: "drop"
+
+  # versionSuffix - Optional - optional version suffix string
+  - name: versionSuffix
+    type: string
+    default: ""
+
+  # dotnetSdkVersions - Optional - The sdk versions to use.
+  - name: dotnetSdkVersions
+    type: object
+    default:
+      - 8.x
+    values:
+      - 8.x
+      - 9.x
+
+  # useGlobalJson - Optional - Use the global.json file to determine the SDK version
+  - name: useGlobalJson
+    type: boolean
+    default: false
+
+    # testProjectNames - Optional - the name(s) of the project(s) to test
+  - name: testProjectNames
+    type: object
+    default: ["*[Tt]ests/*.csproj"]
+
+  # preBuildPublishSteps - Optional - Additional steps to run before the build and publish
+  - name: preBuildPublishSteps
+    type: stepList
+    default: []
+
+  # postBuildPublishSteps - Optional - Additional steps to run after the build and publish
+  - name: postBuildPublishSteps
+    type: stepList
+    default: []
+
+jobs:
+  - job:
+    displayName: "Build project"
+    steps:
+      - ${{ each step in parameters.preBuildPublishSteps }}:
+          - ${{ step }}
+
+      - task: Docker@2
+        displayName: Login to Container Registry
+        inputs:
+          command: login
+          containerRegistry: $(acrServiceConnection)
+
+      - ${{ if eq(parameters.useGlobalJson, true) }}:
+          - task: UseDotNet@2
+            displayName: "Install .NET SDK"
+            inputs:
+              packageType: sdk
+              useGlobalJson: true
+
+      - ${{ if ne(parameters.useGlobalJson, true) }}:
+          - ${{ each sdkVersion in parameters.dotnetSdkVersions }}:
+              - task: UseDotNet@2
+                displayName: "Use .NET ${{ sdkVersion }} SDK"
+                inputs:
+                  packageType: sdk
+                  version: ${{ sdkVersion }}
+
+      - task: NuGetAuthenticate@1
+        displayName: "Authenticate with Azure DevOps NuGet"
+
+      - script: dotnet tool restore --ignore-failed-sources
+        displayName: "Restore .NET Tools"
+
+      - ${{ each project in parameters.projectNames }}:
+        - task: DotNetCoreCLI@2
+          displayName: dotnet restore
+          inputs:
+            command: restore
+            projects: "**/${{ project }}.csproj"
+            feedsToUse: config
+            nugetConfigPath: nuget.config
+
+        - task: DotNetCoreCLI@2
+          displayName: "Building ${{ project }}"
+          inputs:
+            command: "build"
+            projects: "**/${{ project }}.csproj"
+            arguments: "--configuration ${{ parameters.buildConfiguration }}"
+
+      - ${{ each testProject in parameters.testProjectNames }}:
+          - task: DotNetCoreCLI@2
+            displayName: "dotnet test **/*[${{ testProject }}]"
+            inputs:
+              command: "test"
+              testRunTitle: $(Build.BuildNumber)
+              projects: "**/${{ testProject }}"
+              arguments: --configuration ${{ parameters.buildConfiguration }}
+
+      - ${{ each project in parameters.projectNames }}:
+        - task: DotNetCoreCLI@2
+          displayName: Build and push image to container registry
+          inputs:
+            command: "publish"
+            publishWebProjects: false
+            projects: "**/${{ project }}.csproj"
+            arguments: >-
+              -c ${{ parameters.buildConfiguration }}
+              -r ${{ parameters.runtime }}
+              -t:PublishContainer
+              -p:ContainerRegistry=${{ parameters.containerRegistryName }}
+              -p:ContainerImageTags=${{ parameters.tags }}
+              -p:VersionPrefix=${{ parameters.versionPrefix }}
+              -p:VersionSuffix=${{ parameters.versionSuffix }}
+
+      - ${{ each step in parameters.postBuildPublishSteps }}:
+          - ${{ step }}

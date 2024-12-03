@@ -1,0 +1,68 @@
+variables:
+  - template: variables/global.yml
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src
+    exclude:
+      - .azdo
+      - .azuredevops
+      - docs
+      - scripts
+
+pool:
+  vmImage: "ubuntu-latest"
+
+# build run name
+name: $(Date:yyyy).$(Date:MM).$(Date:dd).$(Rev:r)
+
+stages:
+  - stage: Build
+    displayName: Build, test and push image
+    variables:
+      - template: variables/build.yml
+
+      - name: buildConfiguration
+        value: "Release"
+
+      - name: tags
+        ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+          value: '"\""$(Build.BuildNumber)-pr-$(System.PullRequest.PullRequestId)"\""'
+        ${{ else }}:
+          value: '"\""$(Build.BuildNumber)"\""'
+
+      - name: versionSuffix
+        ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+          value: "pr-$(System.PullRequest.PullRequestId)"
+        ${{ else }}:
+          value: ""
+
+      - name: branchName
+        ${{ if startsWith(variables['Build.SourceBranch'], 'refs/heads/') }}:
+          value: $[ replace(variables['Build.SourceBranch'], 'refs/heads/', '') ]
+        ${{ if startsWith(variables['Build.SourceBranch'], 'refs/pull/') }}:
+          value: $[ replace(variables['System.PullRequest.SourceBranch'], 'refs/heads/', '') ]
+
+      - name: containerRegistryName
+        ${{ if eq(variables['Build.Reason'], 'PullRequest') }}:
+          value: ""
+        ${{ else }}:
+          value: $(containerRegistry)
+
+    jobs:
+      - template: jobs/dotnet-build-publish-container-job.yml
+        parameters:
+          projectNames:
+            - $(csprojProjectName)
+          acrServiceConnection: $(acrServiceConnection)
+          containerRegistryName: $(containerRegistryName)
+          dotnetSdkVersions:
+            - 9.x
+          versionPrefix: $(Build.BuildNumber)
+          versionSuffix: $(versionSuffix)
+          tags: $(tags)
