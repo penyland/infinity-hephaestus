@@ -50,7 +50,11 @@ param keyVaultName string
 param aspNetCoreEnvironment string = 'Production'
 
 @description('The id of the log analytics workspace.')
-param logAnalyticsWorkspaceId string = resourceId('Microsoft.OperationalInsights/workspaces', 'DefaultWorkspace-${subscription().subscriptionId}-SEC', 'DefaultResourceGroup-SEC')
+param logAnalyticsWorkspaceId string = resourceId(
+  'DefaultResourceGroup-SEC',
+  'Microsoft.OperationalInsights/workspaces',
+  'DefaultWorkspace-${subscription().subscriptionId}-SEC'
+)
 
 resource userAssignedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'id-${containerAppName}'
@@ -92,6 +96,34 @@ module appConfigRoleAssignments '../modules/appconfig/roleAssignments.bicep' = {
   scope: resourceGroup(platformDependencies.appConfig.resourceGroupName)
 }
 
+module appInsights 'br/public:avm/res/insights/component:0.4.2' = {
+  name: '${deployment().name}-appi'
+  params: {
+    name: 'appi-${containerAppName}'
+    workspaceResourceId: logAnalyticsWorkspaceId
+    tags: tags
+    roleAssignments: [
+      {
+        principalId: userAssignedIdentity.properties.principalId
+        roleDefinitionIdOrName: 'Monitoring Metrics Publisher'
+      }
+    ]
+  }
+}
+
+module keyVaultKeyValues '../modules/keyvault/keyvalues.bicep' = {
+  name: '${deployment().name}-kv-secrets'
+  params: {
+    name: keyVaultName
+    secrets: [
+      {
+        name: '${containerAppName}-appinsights-connection-string'
+        value: appInsights.outputs.connectionString
+      }
+    ]
+  }
+}
+
 module containerApp '../modules/containerapps/containerapp.bicep' = {
   name: '${deployment().name}-ca'
   params: {
@@ -105,9 +137,12 @@ module containerApp '../modules/containerapps/containerapp.bicep' = {
     ingressTargetPort: ingressTargetPort
     aspNetCoreEnvironment: aspNetCoreEnvironment
     environmentVariables: [
+      { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: '${containerAppName}-appinsights-connection-string' }
       { name: 'AZURE_APP_CONFIG_ENDPOINT', value: appConfigModule.properties.endpoint }
       { name: 'OTEL_SERVICE_NAME', value: otelServiceName }
     ]
+    scaleMaxReplicas: scaleMaxReplicas
+    scaleMinReplicas: scaleMinReplicas
     secrets: union(secrets, [
       {
         name: '${containerAppName}-appinsights-connection-string'
@@ -115,11 +150,8 @@ module containerApp '../modules/containerapps/containerapp.bicep' = {
         identity: userAssignedIdentity.id
       }
     ])
-    scaleMaxReplicas: scaleMaxReplicas
-    scaleMinReplicas: scaleMinReplicas
     userAssignedIdentityName: userAssignedIdentity.name
     tags: tags
-    logAnalyticsWorkspaceId: logAnalyticsWorkspaceId
   }
 }
 

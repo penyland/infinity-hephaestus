@@ -69,10 +69,11 @@ param environmentVariables array = []
 @description('Optional. Resource tags.')
 param tags object = {}
 
-@description('The id of the log analytics workspace.')
-param logAnalyticsWorkspaceId string
-
-var managedEnvironmentResourceId = resourceId('Microsoft.App/managedEnvironments', platformDependencies.managedEnvironment.name)
+var managedEnvironmentResourceId = resourceId(
+  platformDependencies.managedEnvironment.resourceGroupName,
+  'Microsoft.App/managedEnvironments',
+  platformDependencies.managedEnvironment.name
+)
 
 resource userAssignedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   name: userAssignedIdentityName
@@ -92,21 +93,6 @@ module acrRoleAssignment '../containerregistry/roleAssignments.bicep' = {
   }
 }
 
-module appInsights 'br/public:avm/res/insights/component:0.4.2' = {
-  name: '${deployment().name}-appi'
-  params: {
-    name: 'appi-${containerAppName}'
-    workspaceResourceId: logAnalyticsWorkspaceId
-    tags: tags
-    roleAssignments: [
-      {
-        principalId: userAssignedIdentity.properties.principalId
-        roleDefinitionIdOrName: 'Monitoring Metrics Publisher'
-      }
-    ]
-  }
-}
-
 module containerApp 'br/public:avm/res/app/container-app:0.11.0' = {
   name: '${deployment().name}-ca'
   params: {
@@ -116,22 +102,28 @@ module containerApp 'br/public:avm/res/app/container-app:0.11.0' = {
     containers: [
       {
         name: customContainerName
-        image: empty(platformDependencies.acrConfig.name) ? '' : '${platformDependencies.acrConfig.name}.azurecr.io/${containerImage}:${containerTag}'
+        image: empty(platformDependencies.acrConfig.name)
+          ? ''
+          : '${platformDependencies.acrConfig.name}.azurecr.io/${containerImage}:${containerTag}'
         resources: resources
-        env: union([
-          { name: 'ASPNETCORE_ENVIRONMENT', value: aspNetCoreEnvironment }
-          { name: 'AZURE_CLIENT_ID', value: userAssignedIdentity.properties.clientId } // Must be set if using user-assigned identity
-          { name: 'AZURE_TENANT_ID', value: subscription().tenantId } // Must be set if using user-assigned identity
-          { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: '${containerAppName}-appinsights-connection-string' }
-        ], environmentVariables)
+        env: union(
+          [
+            { name: 'ASPNETCORE_ENVIRONMENT', value: aspNetCoreEnvironment }
+            { name: 'AZURE_CLIENT_ID', value: userAssignedIdentity.properties.clientId } // Must be set if using user-assigned identity
+            { name: 'AZURE_TENANT_ID', value: subscription().tenantId } // Must be set if using user-assigned identity
+          ],
+          environmentVariables
+        )
       }
     ]
-    registries: empty(platformDependencies.acrConfig.name) ? [] : [
-      {
-        server: '${platformDependencies.acrConfig.name}.azurecr.io'
-        identity: userAssignedIdentity.id
-      }
-    ]
+    registries: empty(platformDependencies.acrConfig.name)
+      ? []
+      : [
+          {
+            server: '${platformDependencies.acrConfig.name}.azurecr.io'
+            identity: userAssignedIdentity.id
+          }
+        ]
     activeRevisionsMode: activeRevisionsMode
     ingressAllowInsecure: ingressAllowInsecure
     ingressExternal: ingressExternal
@@ -145,12 +137,7 @@ module containerApp 'br/public:avm/res/app/container-app:0.11.0' = {
     scaleMaxReplicas: scaleMaxReplicas
     scaleMinReplicas: scaleMinReplicas
     secrets: {
-      secureList: union([
-        {
-          name: '${containerAppName}-appinsights-connection-string'
-          value: appInsights.outputs.connectionString
-        }
-      ], secrets)
+      secureList: secrets
     }
   }
 }

@@ -53,7 +53,7 @@ param storageAccountName string
 param aspNetCoreEnvironment string = 'Production'
 
 @description('The id of the log analytics workspace.')
-param logAnalyticsWorkspaceId string = resourceId('Microsoft.OperationalInsights/workspaces', 'DefaultWorkspace-${subscription().subscriptionId}-SEC', 'DefaultResourceGroup-SEC')
+param logAnalyticsWorkspaceId string = resourceId('DefaultResourceGroup-SEC', 'Microsoft.OperationalInsights/workspaces', 'DefaultWorkspace-${subscription().subscriptionId}-SEC')
 
 resource userAssignedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'id-${containerAppName}'
@@ -111,6 +111,39 @@ module keyVaultRoleAssignments '../modules/keyvault/roleAssignments.bicep' = {
   }
 }
 
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
+  name: platformDependencies.logAnalyticsWorkspace.name
+  scope: resourceGroup(platformDependencies.logAnalyticsWorkspace.resourceGroupName)
+}
+
+module appInsights 'br/public:avm/res/insights/component:0.4.2' = {
+  name: '${deployment().name}-appi'
+  params: {
+    name: 'appi-${containerAppName}'
+    workspaceResourceId: logAnalyticsWorkspace.id
+    tags: tags
+    roleAssignments: [
+      {
+        principalId: userAssignedIdentity.properties.principalId
+        roleDefinitionIdOrName: 'Monitoring Metrics Publisher'
+      }
+    ]
+  }
+}
+
+module keyVaultKeyValues '../modules/keyvault/keyvalues.bicep' = {
+  name: '${deployment().name}-kv-secrets'
+  params: {
+    name: keyVaultName
+    secrets: [
+      {
+        name: '${containerAppName}-appinsights-connection-string'
+        value: appInsights.outputs.connectionString
+      }
+    ]
+  }
+}
+
 module tableStorage 'br/public:avm/res/storage/storage-account:0.14.3' = {
   name: '${deployment().name}-st'
   params: {
@@ -154,6 +187,7 @@ module containerApp '../modules/containerapps/containerapp.bicep' = {
     ingressTargetPort: ingressTargetPort
     aspNetCoreEnvironment: aspNetCoreEnvironment
     environmentVariables: [
+      { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: '${containerAppName}-appinsights-connection-string' }
       { name: 'AZURE_APP_CONFIG_ENDPOINT', value: appConfig.properties.endpoint }
       { name: 'AZURE_STORAGE_ACCOUNT_PRIMARY_ENDPOINT', value: 'https://${tableStorage.outputs.name}.table.${az.environment().suffixes.storage}' }
       { name: 'OTEL_SERVICE_NAME', value: otelServiceName }
@@ -167,7 +201,6 @@ module containerApp '../modules/containerapps/containerapp.bicep' = {
         identity: userAssignedIdentity.id
       }
     ])
-    logAnalyticsWorkspaceId: logAnalyticsWorkspaceId
     userAssignedIdentityName: userAssignedIdentity.name
     tags: tags
   }
