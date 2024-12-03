@@ -8,7 +8,7 @@ param keyVaultName = 'kv-cae-theplatform-dev-swe'
 
 param secrets = [
   {
-    name: 'SlackBotUserOAuthToken'
-    value: readEnvironmentVariable('SLACK_BOT_USER_OAUTH_TOKEN', 'Cannot fetch secret ThePlatformName-BotUserOAuthToken from KeyVault')
+    name: 'ASecretName'
+    value: readEnvironmentVariable('A_SECRET_NAME', 'Cannot fetch secret ThePlatformName-ASecretName from KeyVault')
   }
 ]
