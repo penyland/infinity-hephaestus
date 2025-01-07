@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Azure.Provisioning" Version="1.0.0" />
+    <PackageReference Include="Azure.Provisioning.ApplicationInsights" Version="1.0.0" />
+    <PackageReference Include="Azure.Provisioning.KeyVault" Version="1.0.0" />
+    <PackageReference Include="Azure.Provisioning.Storage" Version="1.0.0" />
+  </ItemGroup>
+
+</Project>
