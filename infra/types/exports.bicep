@@ -12,13 +12,13 @@ type platformSettingsType = {
   acrConfig: resourceSettingsType
 
   @description('Reference to the app configuration store to use.')
-  appConfig: resourceSettingsType
+  appConfig: resourceSettingsType 
   
   @description('Reference to the log analytics workspace to use.')
   logAnalyticsWorkspace: resourceSettingsType?
 
   @description('Reference to the managed environment to deploy to.')
-  managedEnvironment: resourceSettingsType
+  managedEnvironment: resourceSettingsType?
 }
 
 @export()
@@ -66,3 +66,13 @@ type roleAssignmentType = {
   @description('Optional. The Resource Id of the delegated managed identity resource.')
   delegatedManagedIdentityResourceId: string?
 }[]?
+
+@export()
+type keyVaultType = {
+  @maxLength(24)
+  name: string
+  enablePurgeProtection: bool
+  enableSoftDelete: bool
+  enableRbacAuthorization: bool
+  sku: 'standard' | 'premium'
+}

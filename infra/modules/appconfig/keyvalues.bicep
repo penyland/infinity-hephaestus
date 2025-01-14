@@ -15,11 +15,11 @@ param name string
 @description('The key-value pairs to add to the App Configuration store.')
 param keyValues types.keyValuesType
 
-resource appConfigParent 'Microsoft.AppConfiguration/configurationStores@2023-09-01-preview' existing = {
+resource appConfigParent 'Microsoft.AppConfiguration/configurationStores@2024-05-01' existing = {
   name: name
 }
 
-resource key 'Microsoft.AppConfiguration/configurationStores/keyValues@2023-09-01-preview' = [for key in keyValues: {
+resource key 'Microsoft.AppConfiguration/configurationStores/keyValues@2024-05-01' = [for key in keyValues: {
   name: key.name
   parent: appConfigParent
   properties: {

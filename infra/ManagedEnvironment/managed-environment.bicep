@@ -2,6 +2,8 @@ metadata name = 'ThePlatform managed environment deployment'
 metadata description = 'Deploys the managed environment for the ThePlatform'
 metadata author = 'Peter Nylander'
 
+import * as types from '../types/exports.bicep'
+
 @description('Name of the environment to deploy to. Example: dev, test, prod')
 @allowed([
   'dev'
@@ -11,25 +13,23 @@ metadata author = 'Peter Nylander'
 param environment string = 'dev'
 
 @description('Name of the system. Example: ThePlatformName')
-param systemName string = 'ThePlatformName'
+param systemName string
 
 @description('Location of the resources. Example: westeurope')
 param location string = resourceGroup().location
 
-@description('Name of the log analytics workspace to be used.')
-param logAnalyticsWorkspaceName string = 'DefaultWorkspace-${subscription().subscriptionId}-SEC'
-
-@description('Resource group of the log analytics workspace to be used.')
-param logAnalyticsWorkspaceResourceGroup string = 'DefaultResourceGroup-SEC'
-
 @description('Name of the managed container apps environment')
-param managedEnvironmentName string = toLower('cae-${systemName}-${environment}-swe')
+@maxLength(32)
+param managedEnvironmentName string = toLower('${systemName}-${environment}-cae')
+
+@description('The resource group for the platform resources.')
+param platformDependencies types.platformSettingsType
 
 @description('The current date and time in UTC format. Example: 2021-06-01T1200')
 param now string = utcNow('yyyy-MM-ddTHHmm')
 
-@description('Name of the key vault of the theprojectname platform')
-param keyVaultName string
+@description('Key vault properties')
+param keyVault types.keyVaultType
 
 @description('Secrets to be added to the key vault')
 param secrets array = []
@@ -42,14 +42,13 @@ param tags object = {}
 
 var resourceTags = union(tags, {
   Environment: environment
-  Project: 'theprojectname'
-  System: 'ThePlatformName'
+  System: systemName
   LastDeployed: now
 })
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
-  name: logAnalyticsWorkspaceName
-  scope: resourceGroup(logAnalyticsWorkspaceResourceGroup)
+  name: platformDependencies.?logAnalyticsWorkspace.?name ?? 'DefaultWorkspace-${subscription().subscriptionId}-SEC'
+  scope: resourceGroup(platformDependencies.?logAnalyticsWorkspace.?resourceGroupName ?? 'DefaultResourceGroup-SEC')
 }
 
 module managedEnvironment 'br/public:avm/res/app/managed-environment:0.8.1' = {
@@ -61,17 +60,22 @@ module managedEnvironment 'br/public:avm/res/app/managed-environment:0.8.1' = {
     // Non-required parameters
     location: location
     infrastructureResourceGroupName: resourceGroup().name
-    tags: tags
+    tags: resourceTags
     zoneRedundant: false
   }
 }
 
-module keyvault 'br/public:avm/res/key-vault/vault:0.11.0' = {
+module keyvault 'br/public:avm/res/key-vault/vault:0.11.1' = if (!empty(keyVault)) {
   name: '${deployment().name}-kv'
   params: {
-    name: keyVaultName
+    name: keyVault.name
     tags: resourceTags
     secrets: deploySecrets ? secrets : []
+    enablePurgeProtection: keyVault.enablePurgeProtection ?? false
+    enableSoftDelete: keyVault.enableSoftDelete ?? false
+    enableRbacAuthorization: keyVault.enableRbacAuthorization ?? true
+    sku: keyVault.sku
+    location: location
   }
 }
 
@@ -79,5 +83,5 @@ output managedEnvironmentName string = managedEnvironment.outputs.name
 output managedEnvironmentResourceId string = managedEnvironment.outputs.resourceId
 output defaultDomain string = managedEnvironment.outputs.defaultDomain
 
-output keyVaultName string = keyvault.outputs.name
-output keyVaultUri string = keyvault.outputs.uri
+output keyVaultName string = !empty(keyVault.name) ? keyvault.outputs.name : ''
+output keyVaultUri string = !empty(keyVault) ? keyvault.outputs.uri : ''

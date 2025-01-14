@@ -93,10 +93,10 @@ module acrRoleAssignment '../containerregistry/roleAssignments.bicep' = {
   }
 }
 
-module containerApp 'br/public:avm/res/app/container-app:0.11.0' = {
+module containerApp 'br/public:avm/res/app/container-app:0.12.0' = {
   name: '${deployment().name}-ca'
   params: {
-    name: 'ca-${containerAppName}'
+    name: containerAppName
     environmentResourceId: managedEnvironmentResourceId
     tags: tags
     containers: [

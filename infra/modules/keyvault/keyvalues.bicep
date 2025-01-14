@@ -11,14 +11,14 @@ targetScope = 'resourceGroup'
 param name string
 
 @description('The key-value pairs to add to the Key Vault store.')
-param secrets types.keyValuesType
+param keyValues types.keyValuesType
 
 resource keyVaultParent 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
   name: name
 }
 
 resource secret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = [
-  for secret in secrets: {
+  for secret in keyValues: {
     name: secret.name
     parent: keyVaultParent
     properties: {
